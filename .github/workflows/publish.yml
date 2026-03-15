@@ -18,6 +18,12 @@ jobs:
   publish:
     name: Build & Publish
     runs-on: ubuntu-latest
+
+    # Trusted Publishing: OIDC token exchange with npm (no NPM_TOKEN secret needed)
+    permissions:
+      id-token: write   # allows npm to verify this workflow via OIDC
+      contents: write   # allows pushing the version bump commit back to the repo
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,20 +51,16 @@ jobs:
           pnpm --filter @plurity/toll-nextjs version ${{ inputs.version_bump }} --no-git-tag-version
           pnpm --filter @plurity/toll-express version ${{ inputs.version_bump }} --no-git-tag-version
 
+      # --provenance attaches a signed build attestation so consumers can verify
+      # the package was built from this exact repo + commit
       - name: Publish @plurity/toll
-        run: pnpm --filter @plurity/toll publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm --filter @plurity/toll publish --no-git-checks --provenance
 
       - name: Publish @plurity/toll-nextjs
-        run: pnpm --filter @plurity/toll-nextjs publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm --filter @plurity/toll-nextjs publish --no-git-checks --provenance
 
       - name: Publish @plurity/toll-express
-        run: pnpm --filter @plurity/toll-express publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm --filter @plurity/toll-express publish --no-git-checks --provenance
 
       - name: Commit version bumps
         run: |
