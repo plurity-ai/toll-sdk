@@ -1,0 +1,69 @@
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options: [patch, minor, major]
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Bump versions
+        run: |
+          pnpm --filter @plurity/toll version ${{ inputs.version_bump }} --no-git-tag-version
+          pnpm --filter @plurity/toll-nextjs version ${{ inputs.version_bump }} --no-git-tag-version
+          pnpm --filter @plurity/toll-express version ${{ inputs.version_bump }} --no-git-tag-version
+
+      - name: Publish @plurity/toll
+        run: pnpm --filter @plurity/toll publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @plurity/toll-nextjs
+        run: pnpm --filter @plurity/toll-nextjs publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @plurity/toll-express
+        run: pnpm --filter @plurity/toll-express publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bumps
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/*/package.json pnpm-lock.yaml
+          git commit -m "chore: bump SDK versions (${{ inputs.version_bump }})" || echo "nothing to commit"
+          git push
