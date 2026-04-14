@@ -50,6 +50,7 @@ jobs:
           pnpm --filter @plurity/toll version ${{ inputs.version_bump }} --no-git-tag-version
           pnpm --filter @plurity/toll-nextjs version ${{ inputs.version_bump }} --no-git-tag-version
           pnpm --filter @plurity/toll-express version ${{ inputs.version_bump }} --no-git-tag-version
+          pnpm --filter @plurity/toll-browser version ${{ inputs.version_bump }} --no-git-tag-version
 
       # --provenance attaches a signed build attestation so consumers can verify
       # the package was built from this exact repo + commit
@@ -62,6 +63,9 @@ jobs:
       - name: Publish @plurity/toll-express
         run: pnpm --filter @plurity/toll-express publish --no-git-checks --provenance
 
+      - name: Publish @plurity/toll-browser
+        run: pnpm --filter @plurity/toll-browser publish --no-git-checks --provenance
+
       - name: Commit version bumps
         run: |
           git config user.name "github-actions[bot]"
@@ -69,3 +73,28 @@ jobs:
           git add packages/*/package.json pnpm-lock.yaml
           git commit -m "chore: bump SDK versions (${{ inputs.version_bump }})" || echo "nothing to commit"
           git push
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: eu-central-1
+          role-to-assume: ${{ secrets.CDN_DEPLOY_ROLE_ARN }}
+
+      - name: Deploy toll.js to S3 + invalidate CloudFront
+        env:
+          S3_BUCKET: ${{ secrets.CDN_S3_BUCKET }}
+          CF_DISTRIBUTION_ID: ${{ secrets.CDN_CF_DISTRIBUTION_ID }}
+        run: |
+          VERSION=$(node -p "require('./packages/browser/package.json').version")
+          # Upload versioned file (permanent cache — content never changes at this URL)
+          aws s3 cp packages/browser/dist/toll.js "s3://${S3_BUCKET}/toll@${VERSION}.js" \
+            --content-type "application/javascript" \
+            --cache-control "public, max-age=31536000, immutable"
+          # Upload latest (short cache so customers pick up updates within an hour)
+          aws s3 cp packages/browser/dist/toll.js "s3://${S3_BUCKET}/toll.js" \
+            --content-type "application/javascript" \
+            --cache-control "public, max-age=3600"
+          # Invalidate CloudFront for the mutable latest path only
+          aws cloudfront create-invalidation \
+            --distribution-id "${CF_DISTRIBUTION_ID}" \
+            --paths "/toll.js"

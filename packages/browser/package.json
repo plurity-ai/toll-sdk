@@ -1,0 +1,24 @@
+{
+  "name": "@plurity/toll-browser",
+  "version": "0.1.0",
+  "description": "Browser snippet for Plurity Toll — track AI agent and visitor traffic via a script tag",
+  "main": "./dist/toll.js",
+  "exports": {
+    ".": "./dist/toll.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
