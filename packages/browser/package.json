@@ -1,5 +1,5 @@
 {
-  "name": "@plurity/toll-browser",
+  "name": "@plurity/toll-js",
   "version": "0.1.0",
   "description": "Browser snippet for Plurity Toll — track AI agent and visitor traffic via a script tag",
   "main": "./dist/toll.js",

@@ -50,7 +50,7 @@ jobs:
           pnpm --filter @plurity/toll version ${{ inputs.version_bump }} --no-git-tag-version
           pnpm --filter @plurity/toll-nextjs version ${{ inputs.version_bump }} --no-git-tag-version
           pnpm --filter @plurity/toll-express version ${{ inputs.version_bump }} --no-git-tag-version
-          pnpm --filter @plurity/toll-browser version ${{ inputs.version_bump }} --no-git-tag-version
+          pnpm --filter @plurity/toll-js version ${{ inputs.version_bump }} --no-git-tag-version
 
       # --provenance attaches a signed build attestation so consumers can verify
       # the package was built from this exact repo + commit
@@ -63,8 +63,8 @@ jobs:
       - name: Publish @plurity/toll-express
         run: pnpm --filter @plurity/toll-express publish --no-git-checks --provenance
 
-      - name: Publish @plurity/toll-browser
-        run: pnpm --filter @plurity/toll-browser publish --no-git-checks --provenance
+      - name: Publish @plurity/toll-js
+        run: pnpm --filter @plurity/toll-js publish --no-git-checks --provenance
 
       - name: Commit version bumps
         run: |
