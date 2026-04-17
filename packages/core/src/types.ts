@@ -101,6 +101,10 @@ export interface TollConfig {
   // Caching
   cacheTtlMs?: number;
 
+  // Disable event tracking entirely — llms.txt and CMS answer pages still work.
+  // Useful when you only want the hosted Q&A/llms.txt features without collecting traffic data.
+  tracking?: boolean;
+
   // Callbacks
   onError?: (error: Error) => void;
   onFlush?: (count: number) => void;

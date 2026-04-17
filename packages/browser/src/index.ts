@@ -103,6 +103,26 @@ function buildPayload(
 interface TaggedResult {
   found: boolean;
   label?: string;
+  extra?: Record<string, string>;
+}
+
+// Reserved data-toll-* keys that are not forwarded as custom fields
+const RESERVED = new Set(["siteId", "siteKey", "mode", "serverUrl", "track", "label"]);
+
+function collectTollData(el: Element): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name.startsWith("data-toll-")) {
+      // Convert data-toll-my-field → myField (camelCase)
+      const key = attr.name
+        .slice("data-toll-".length)
+        .replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      if (!RESERVED.has(key)) {
+        result[key] = attr.value;
+      }
+    }
+  }
+  return result;
 }
 
 function findTaggedAncestor(el: Element | null, maxLevels: number): TaggedResult {
@@ -113,7 +133,8 @@ function findTaggedAncestor(el: Element | null, maxLevels: number): TaggedResult
         current.getAttribute("data-toll-label") ??
         current.getAttribute("data-toll-track") ??
         undefined;
-      return { found: true, label: label || undefined };
+      const extra = collectTollData(current);
+      return { found: true, label: label || undefined, extra };
     }
     current = current.parentElement;
   }
@@ -170,7 +191,7 @@ function init(): void {
         const result = findTaggedAncestor(interactable, 3);
         if (!result.found) return;
         const targetUrl = anchor?.href ?? undefined;
-        send([buildPayload("click", { label: result.label, targetUrl })]);
+        send([buildPayload("click", { label: result.label, targetUrl, ...result.extra })]);
       } else {
         // mode === "all"
         const targetUrl = anchor?.href ?? undefined;
@@ -179,7 +200,8 @@ function init(): void {
           interactable.getAttribute("aria-label") ??
           interactable.textContent?.trim().slice(0, 80) ??
           undefined;
-        send([buildPayload("click", { label: label || undefined, targetUrl })]);
+        const extra = collectTollData(interactable);
+        send([buildPayload("click", { label: label || undefined, targetUrl, ...extra })]);
       }
     },
     { passive: true }
@@ -197,14 +219,15 @@ function init(): void {
       if (mode === "tagged") {
         const result = findTaggedAncestor(form, 3);
         if (!result.found) return;
-        send([buildPayload("submit", { label: result.label })]);
+        send([buildPayload("submit", { label: result.label, ...result.extra })]);
       } else {
         const label =
           form.getAttribute("data-toll-label") ??
           form.getAttribute("name") ??
           form.getAttribute("id") ??
           undefined;
-        send([buildPayload("submit", { label: label || undefined })]);
+        const extra = collectTollData(form);
+        send([buildPayload("submit", { label: label || undefined, ...extra })]);
       }
     },
     { passive: true }

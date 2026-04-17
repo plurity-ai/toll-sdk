@@ -63,8 +63,12 @@ export class Toll {
   /**
    * Track only if the request is from a known agent (bots/crawlers).
    * Use this for regular pages where you only want agent traffic.
+   * No-op when `tracking: false` is set in config.
    */
   track(request: IncomingRequest): TrackResult {
+    if (this.config.tracking === false) {
+      return { isAgent: false, agentName: null, eventId: null };
+    }
     const detection = this.detector.detect(request);
     if (!detection.isAgent || !detection.agentName) {
       return { isAgent: false, agentName: null, eventId: null };
@@ -75,8 +79,12 @@ export class Toll {
   /**
    * Track all visitors regardless of UA — use this for llms.txt and Q&A pages
    * where you want to see every request (agents labeled by name, humans as "visitor").
+   * No-op when `tracking: false` is set in config.
    */
   trackAny(request: IncomingRequest): TrackResult {
+    if (this.config.tracking === false) {
+      return { isAgent: false, agentName: null, eventId: null };
+    }
     const agentName = this.detector.detectAny(request);
     return this.buffer(request, agentName);
   }
