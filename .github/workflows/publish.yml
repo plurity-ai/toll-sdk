@@ -74,6 +74,9 @@ jobs:
           git commit -m "chore: bump SDK versions (${{ inputs.version_bump }})" || echo "nothing to commit"
           git push
 
+      - name: Build browser package for CDN upload
+        run: pnpm --filter @plurity/toll-js build
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
