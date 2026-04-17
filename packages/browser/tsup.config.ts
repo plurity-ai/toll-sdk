@@ -10,4 +10,5 @@ export default defineConfig({
   dts: false,
   sourcemap: false,
   outDir: "dist",
+  outExtension: () => ({ js: ".js" }),
 });
