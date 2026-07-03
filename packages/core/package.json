@@ -1,6 +1,6 @@
 {
   "name": "@plurity/toll",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI agent traffic tracking and llms.txt management SDK",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

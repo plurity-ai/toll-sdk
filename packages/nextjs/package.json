@@ -1,6 +1,6 @@
 {
   "name": "@plurity/toll-nextjs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Next.js middleware adapter for @plurity/toll",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

@@ -1,12 +1,14 @@
 {
   "name": "@plurity/toll-js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser snippet for Plurity Toll — track AI agent and visitor traffic via a script tag",
   "main": "./dist/toll.js",
   "exports": {
     ".": "./dist/toll.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
