@@ -17,14 +17,16 @@ export type TollMiddlewareConfig = Omit<TollConfig, "siteId"> & {
 
 /**
  * Creates a Next.js middleware function that:
- * 1. Serves /llms.txt and CMS answer pages from cached Q&A config
- * 2. Tracks ALL visitors on llms paths (bots labeled by name, humans as "visitor")
- * 3. Tracks only known agents (bots) on all other paths
+ * 1. Redirects LLM provider crawlers with 307 when forceRedirect is configured
+ * 2. Serves /llms.txt and CMS answer pages from cached Q&A config
+ * 3. Tracks ALL visitors on llms paths (bots labeled by name, humans as "visitor")
+ * 4. Tracks known agents (bots) on all other paths
  */
 export function createTollMiddleware(config: TollMiddlewareConfig) {
   const toll = new Toll(config);
   const llmsTxtPath = config.llmsTxtPath ?? "/llms.txt";
-  const extraTrackAllPaths = config.trackAllPaths ?? [];
+  // Derive the CMS base path from llmsTxtPath: "/llms.txt" → "/llms"
+  const llmsBase = llmsTxtPath.slice(0, llmsTxtPath.lastIndexOf(".")) || llmsTxtPath;
 
   return async function tollMiddleware(
     request: NextRequest,
@@ -39,9 +41,25 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
       ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
     };
 
-    // ── llms.txt — serve + track all visitors ────────────────────────────────
+    // Detect once and reuse across all branches to avoid double-tracking.
+    const tracked = toll.trackAny(incomingRequest);
+
+    // ── LLM agent redirect — before serving anything else ────────────────────
+    // Skip if already on the redirect target to avoid infinite redirect loops.
+    if (config.forceRedirect && tracked.isLlmAgent) {
+      const redirectUrl = new URL(config.forceRedirect, request.url);
+      const alreadyOnLlmsPath = pathname === redirectUrl.pathname || pathname.startsWith(llmsBase + "/");
+      if (!alreadyOnLlmsPath) {
+        if (event && typeof event.waitUntil === "function") {
+          event.waitUntil(toll.flush());
+        }
+        return NextResponse.redirect(redirectUrl, { status: 307 });
+      }
+    }
+
+    // ── llms.txt — serve + flush ──────────────────────────────────────────────
     if (pathname === llmsTxtPath) {
-      trackAndFlush(toll.trackAny(incomingRequest), toll, event);
+      flushIfAgent(tracked, toll, event);
       try {
         const result = await toll.getLlmsTxt();
         return new NextResponse(result.content, {
@@ -59,11 +77,11 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
       }
     }
 
-    // ── CMS answer pages — serve + track all visitors ─────────────────────────
+    // ── CMS answer pages — serve + flush ──────────────────────────────────────
     try {
       const answer = await toll.serveAnswerPage(pathname);
       if (answer) {
-        trackAndFlush(toll.trackAny(incomingRequest), toll, event);
+        flushIfAgent(tracked, toll, event);
         return new NextResponse(answer.content, {
           status: 200,
           headers: {
@@ -76,23 +94,14 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
       // non-fatal — fall through
     }
 
-    // ── Extra trackAllPaths — track all visitors ───────────────────────────────
-    const isExtraTrackAll = extraTrackAllPaths.some(p =>
-      typeof p === "string" ? pathname === p : p.test(pathname)
-    );
-    if (isExtraTrackAll) {
-      trackAndFlush(toll.trackAny(incomingRequest), toll, event);
-      return null;
-    }
-
-    // ── All other paths — track all visitors (raw UA stored, evaluate later) ──
-    trackAndFlush(toll.trackAny(incomingRequest), toll, event);
+    // ── All other paths — flush if agent ──────────────────────────────────────
+    flushIfAgent(tracked, toll, event);
 
     return null;
   };
 }
 
-function trackAndFlush(
+function flushIfAgent(
   result: { isAgent: boolean },
   toll: Toll,
   event?: NextFetchEvent

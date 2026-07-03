@@ -60,6 +60,7 @@ export interface TrackResult {
   isAgent: boolean;
   agentName: string | null;
   eventId: string | null;
+  isLlmAgent: boolean;
 }
 
 export interface LlmsTxtResult {
@@ -104,6 +105,11 @@ export interface TollConfig {
   // Disable event tracking entirely — llms.txt and CMS answer pages still work.
   // Useful when you only want the hosted Q&A/llms.txt features without collecting traffic data.
   tracking?: boolean;
+
+  // When set, LLM provider crawlers (GPTBot, ClaudeBot, PerplexityBot, etc.) receive a
+  // 307 Temporary Redirect to this URL. Search-engine indexers (Googlebot, Bingbot, …)
+  // and social/SEO bots are never redirected. Tracking still fires before the redirect.
+  forceRedirect?: string;
 
   // Callbacks
   onError?: (error: Error) => void;

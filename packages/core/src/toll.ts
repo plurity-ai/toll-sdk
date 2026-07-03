@@ -67,13 +67,13 @@ export class Toll {
    */
   track(request: IncomingRequest): TrackResult {
     if (this.config.tracking === false) {
-      return { isAgent: false, agentName: null, eventId: null };
+      return { isAgent: false, agentName: null, eventId: null, isLlmAgent: false };
     }
     const detection = this.detector.detect(request);
     if (!detection.isAgent || !detection.agentName) {
-      return { isAgent: false, agentName: null, eventId: null };
+      return { isAgent: false, agentName: null, eventId: null, isLlmAgent: false };
     }
-    return this.buffer(request, detection.agentName);
+    return this.buffer(request, detection.agentName, detection.isLlmAgent);
   }
 
   /**
@@ -83,13 +83,14 @@ export class Toll {
    */
   trackAny(request: IncomingRequest): TrackResult {
     if (this.config.tracking === false) {
-      return { isAgent: false, agentName: null, eventId: null };
+      return { isAgent: false, agentName: null, eventId: null, isLlmAgent: false };
     }
-    const agentName = this.detector.detectAny(request);
-    return this.buffer(request, agentName);
+    const detection = this.detector.detect(request);
+    const agentName = detection.agentName ?? "visitor";
+    return this.buffer(request, agentName, detection.isLlmAgent);
   }
 
-  private buffer(request: IncomingRequest, agentName: string): TrackResult {
+  private buffer(request: IncomingRequest, agentName: string, isLlmAgent: boolean): TrackResult {
     const url = new URL(request.url, "http://localhost");
     const eventId = crypto.randomUUID();
 
@@ -105,7 +106,7 @@ export class Toll {
       occurredAt: new Date().toISOString(),
     });
 
-    return { isAgent: true, agentName, eventId };
+    return { isAgent: true, agentName, eventId, isLlmAgent };
   }
 
   /**

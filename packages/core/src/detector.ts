@@ -28,9 +28,27 @@ const BUILT_IN_AGENT_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   { pattern: /ia_archiver/i, name: "WaybackMachine" },
 ];
 
+/**
+ * Agent names that represent LLM providers/AI assistants fetching content to
+ * answer user questions. Excludes search-engine indexers (Googlebot, Bingbot,
+ * DuckDuckBot) and social/SEO crawlers so those are never redirected.
+ */
+export const LLM_AGENT_NAMES = new Set([
+  "GPTBot",
+  "ClaudeBot",
+  "ClaudeWeb",
+  "PerplexityBot",
+  "AnthropicAI",
+  "ChatGPT",
+  "OAI-SearchBot",
+  "YouBot",
+]);
+
 export interface DetectionResult {
   isAgent: boolean;
   agentName: string | null;
+  /** True only for LLM provider crawlers — excludes search indexers and social bots. */
+  isLlmAgent: boolean;
 }
 
 export class AgentDetector {
@@ -58,30 +76,32 @@ export class AgentDetector {
     for (const rule of this.headerRules) {
       const headerValue = this.getHeader(request, rule.header.toLowerCase());
       if (rule.exists && headerValue !== undefined) {
-        return { isAgent: true, agentName: rule.header };
+        const agentName = rule.header;
+        return { isAgent: true, agentName, isLlmAgent: LLM_AGENT_NAMES.has(agentName) };
       }
       if (rule.value && headerValue === rule.value) {
-        return { isAgent: true, agentName: `${rule.header}:${rule.value}` };
+        const agentName = `${rule.header}:${rule.value}`;
+        return { isAgent: true, agentName, isLlmAgent: LLM_AGENT_NAMES.has(agentName) };
       }
     }
 
     // Check custom include patterns
     for (const { pattern, name } of this.customPatterns) {
       if (pattern.test(ua)) {
-        if (this.isExcluded(ua)) return { isAgent: false, agentName: null };
-        return { isAgent: true, agentName: name };
+        if (this.isExcluded(ua)) return { isAgent: false, agentName: null, isLlmAgent: false };
+        return { isAgent: true, agentName: name, isLlmAgent: LLM_AGENT_NAMES.has(name) };
       }
     }
 
     // Check built-in patterns
     for (const { pattern, name } of BUILT_IN_AGENT_PATTERNS) {
       if (pattern.test(ua)) {
-        if (this.isExcluded(ua)) return { isAgent: false, agentName: null };
-        return { isAgent: true, agentName: name };
+        if (this.isExcluded(ua)) return { isAgent: false, agentName: null, isLlmAgent: false };
+        return { isAgent: true, agentName: name, isLlmAgent: LLM_AGENT_NAMES.has(name) };
       }
     }
 
-    return { isAgent: false, agentName: null };
+    return { isAgent: false, agentName: null, isLlmAgent: false };
   }
 
   /** Returns the detected agent name from UA, or "visitor" if not a known agent. */
