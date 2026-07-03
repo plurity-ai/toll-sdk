@@ -47,10 +47,11 @@ jobs:
 
       - name: Bump versions
         run: |
-          pnpm --filter @plurity/toll version ${{ inputs.version_bump }} --no-git-tag-version
-          pnpm --filter @plurity/toll-nextjs version ${{ inputs.version_bump }} --no-git-tag-version
-          pnpm --filter @plurity/toll-express version ${{ inputs.version_bump }} --no-git-tag-version
-          pnpm --filter @plurity/toll-js version ${{ inputs.version_bump }} --no-git-tag-version
+          cd packages/core    && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/nextjs  && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/express && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/browser && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          pnpm install --no-frozen-lockfile
 
       # --provenance attaches a signed build attestation so consumers can verify
       # the package was built from this exact repo + commit
