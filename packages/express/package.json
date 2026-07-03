@@ -1,6 +1,6 @@
 {
   "name": "@plurity/toll-express",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Express middleware adapter for @plurity/toll",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -24,7 +24,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@plurity/toll": "workspace:*"
+    "@plurity/toll": "^0.1.1"
   },
   "peerDependencies": {
     "express": ">=4.0.0"

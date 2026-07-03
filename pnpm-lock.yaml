@@ -39,8 +39,8 @@ importers:
   packages/express:
     dependencies:
       '@plurity/toll':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
       '@types/express':
         specifier: ^4.17.21
@@ -61,8 +61,8 @@ importers:
   packages/nextjs:
     dependencies:
       '@plurity/toll':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
       '@types/node':
         specifier: ^22.10.7
@@ -438,6 +438,9 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@plurity/toll@0.1.1':
+    resolution: {integrity: sha512-G7cTMDE6+BwALTY8C3pVMryeUfhP6PZK3MoqFzSTaDH8N5gEoErbic1MxaJKWhJEDpfaJk6s7F7CgICCzjFPnw==}
 
   '@rollup/rollup-android-arm-eabi@4.59.0':
     resolution: {integrity: sha512-upnNBkA6ZH2VKGcBj9Fyl9IGNPULcjXRlg0LLeaioQWueH30p6IXtJEbKAgvyv+mJaMxSm1l6xwDXYjpEMiLMg==}
@@ -1406,6 +1409,8 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@15.5.12':
     optional: true
+
+  '@plurity/toll@0.1.1': {}
 
   '@rollup/rollup-android-arm-eabi@4.59.0':
     optional: true
