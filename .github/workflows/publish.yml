@@ -53,19 +53,13 @@ jobs:
           cd packages/browser && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
           pnpm install --no-frozen-lockfile
 
-      # --provenance attaches a signed build attestation so consumers can verify
-      # the package was built from this exact repo + commit
-      - name: Publish @plurity/toll
-        run: pnpm --filter @plurity/toll publish --no-git-checks --provenance
-
-      - name: Publish @plurity/toll-nextjs
-        run: pnpm --filter @plurity/toll-nextjs publish --no-git-checks --provenance
-
-      - name: Publish @plurity/toll-express
-        run: pnpm --filter @plurity/toll-express publish --no-git-checks --provenance
-
-      - name: Publish @plurity/toll-js
-        run: pnpm --filter @plurity/toll-js publish --no-git-checks --provenance
+      # npm publish handles OIDC token exchange for provenance; pnpm publish does not.
+      - name: Publish packages
+        run: |
+          cd packages/core    && npm publish --provenance --access public && cd ../..
+          cd packages/nextjs  && npm publish --provenance --access public && cd ../..
+          cd packages/express && npm publish --provenance --access public && cd ../..
+          cd packages/browser && npm publish --provenance --access public && cd ../..
 
       - name: Commit version bumps
         run: |
