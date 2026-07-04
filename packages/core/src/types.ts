@@ -13,6 +13,13 @@ export interface TrackingEvent {
   qaPairId?: string;
   occurredAt: string; // ISO 8601
   customFields?: Record<string, unknown>;
+  // Session + UTM attribution (populated by middleware)
+  sessionKey?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
 }
 
 export interface QAPair {
@@ -56,6 +63,16 @@ export interface IncomingRequest {
   ip?: string;
 }
 
+/** Extra attribution context passed into track/trackAny, populated by middleware. */
+export interface TrackingExtra {
+  sessionKey?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+}
+
 export interface TrackResult {
   isAgent: boolean;
   agentName: string | null;
@@ -67,6 +84,8 @@ export interface LlmsTxtResult {
   content: string;
   contentType: "text/plain";
   cacheHit: boolean;
+  /** Session key created by the toll server for this fetch — use when tracking the event. */
+  sessionKey?: string;
 }
 
 export interface HeaderRule {
@@ -123,4 +142,10 @@ export interface TollBackend {
   getConfig(siteId: string): Promise<SiteConfig>;
   submitQuestion(siteId: string, question: AgentQuestion): Promise<void>;
   getAnswerContent(siteId: string, slug: string): Promise<string | null>;
+  /** Optional: proxy the full llms.txt from the server (creates session, encodes links). */
+  getLlmsTxt?(siteId: string, userAgent?: string, siteOrigin?: string): Promise<{ content: string; sessionKey?: string }>;
+  /** Optional: call the server's redirect-info API (used by middleware for /r/ paths). */
+  resolveRedirect?(encoded: string, cookieId?: string, siteOrigin?: string): Promise<{ targetUrl: string; visitorCookieId: string | null }>;
+  /** Optional: mark a session as converted when a human lands with ?_s= outside of /r/ flow. */
+  convertSession?(sessionKey: string, cookieId?: string): Promise<{ visitorCookieId: string | null }>;
 }

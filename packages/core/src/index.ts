@@ -7,6 +7,7 @@ export type {
   TollConfig,
   TollBackend,
   TrackingEvent,
+  TrackingExtra,
   SiteConfig,
   QAPair,
   AgentQuestion,

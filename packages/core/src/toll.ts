@@ -3,10 +3,11 @@ import type {
   TollBackend,
   IncomingRequest,
   TrackResult,
+  TrackingExtra,
   LlmsTxtResult,
   SiteConfig,
 } from "./types.js";
-import { AgentDetector } from "./detector.js";
+import { AgentDetector, type DetectionResult } from "./detector.js";
 import { ConfigCache } from "./cache.js";
 import { EventBatcher } from "./batcher.js";
 import { generateLlmsTxt } from "./llms-txt.js";
@@ -60,12 +61,17 @@ export class Toll {
     });
   }
 
+  /** Expose agent detection without buffering an event. */
+  detect(request: IncomingRequest): DetectionResult {
+    return this.detector.detect(request);
+  }
+
   /**
    * Track only if the request is from a known agent (bots/crawlers).
    * Use this for regular pages where you only want agent traffic.
    * No-op when `tracking: false` is set in config.
    */
-  track(request: IncomingRequest): TrackResult {
+  track(request: IncomingRequest, extra?: TrackingExtra): TrackResult {
     if (this.config.tracking === false) {
       return { isAgent: false, agentName: null, eventId: null, isLlmAgent: false };
     }
@@ -73,7 +79,7 @@ export class Toll {
     if (!detection.isAgent || !detection.agentName) {
       return { isAgent: false, agentName: null, eventId: null, isLlmAgent: false };
     }
-    return this.buffer(request, detection.agentName, detection.isLlmAgent);
+    return this.buffer(request, detection.agentName, detection.isLlmAgent, extra);
   }
 
   /**
@@ -81,16 +87,21 @@ export class Toll {
    * where you want to see every request (agents labeled by name, humans as "visitor").
    * No-op when `tracking: false` is set in config.
    */
-  trackAny(request: IncomingRequest): TrackResult {
+  trackAny(request: IncomingRequest, extra?: TrackingExtra): TrackResult {
     if (this.config.tracking === false) {
       return { isAgent: false, agentName: null, eventId: null, isLlmAgent: false };
     }
     const detection = this.detector.detect(request);
     const agentName = detection.agentName ?? "visitor";
-    return this.buffer(request, agentName, detection.isLlmAgent);
+    return this.buffer(request, agentName, detection.isLlmAgent, extra);
   }
 
-  private buffer(request: IncomingRequest, agentName: string, isLlmAgent: boolean): TrackResult {
+  private buffer(
+    request: IncomingRequest,
+    agentName: string,
+    isLlmAgent: boolean,
+    extra?: { sessionKey?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string; utmContent?: string; utmTerm?: string }
+  ): TrackResult {
     const url = new URL(request.url, "http://localhost");
     const eventId = crypto.randomUUID();
 
@@ -104,15 +115,29 @@ export class Toll {
       httpMethod: request.method,
       referer: this.getHeader(request, "referer"),
       occurredAt: new Date().toISOString(),
+      sessionKey: extra?.sessionKey,
+      utmSource: extra?.utmSource,
+      utmMedium: extra?.utmMedium,
+      utmCampaign: extra?.utmCampaign,
+      utmContent: extra?.utmContent,
+      utmTerm: extra?.utmTerm,
     });
 
     return { isAgent: true, agentName, eventId, isLlmAgent };
   }
 
   /**
-   * Get the current llms.txt content (cached, non-blocking after first load).
+   * Get llms.txt content.
+   * When the backend supports getLlmsTxt (PlurityBackend), the full response is
+   * fetched from the toll server — it creates a session and embeds encoded tracking
+   * links so agent sessions can be attributed to human conversions.
+   * Falls back to local generation when the backend doesn't support it.
    */
-  async getLlmsTxt(): Promise<LlmsTxtResult> {
+  async getLlmsTxt(userAgent?: string, siteOrigin?: string): Promise<LlmsTxtResult> {
+    if (this.backend.getLlmsTxt) {
+      const { content, sessionKey } = await this.backend.getLlmsTxt(this.config.siteId, userAgent, siteOrigin);
+      return { content, contentType: "text/plain", cacheHit: false, sessionKey };
+    }
     const config = await this.cache.get(this.config.siteId);
     const content = generateLlmsTxt(config);
     return { content, contentType: "text/plain", cacheHit: true };
@@ -150,6 +175,30 @@ export class Toll {
       ? `# ${pair.question}\n\n${content}`
       : content;
 
+    return { content: headed, contentType: "text/markdown" };
+  }
+
+  /**
+   * Serve a CMS answer by slug directly — bypasses path prefix matching.
+   * Used by the middleware when serving agent content from a smart permalink.
+   */
+  async serveAnswerBySlug(slug: string): Promise<{ content: string; contentType: "text/markdown" } | null> {
+    let siteConfig: SiteConfig;
+    try {
+      siteConfig = await this.cache.get(this.config.siteId);
+    } catch {
+      return null;
+    }
+    if (!siteConfig.cmsMode) return null;
+
+    const content = await this.backend.getAnswerContent(this.config.siteId, slug);
+    if (!content) return null;
+
+    const pair = siteConfig.qaPairs.find((qa) => {
+      const url = qa.answerUrl ?? "";
+      return url.endsWith(`/${slug}`);
+    });
+    const headed = pair?.question ? `# ${pair.question}\n\n${content}` : content;
     return { content: headed, contentType: "text/markdown" };
   }
 

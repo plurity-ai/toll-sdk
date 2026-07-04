@@ -78,6 +78,63 @@ export class PlurityBackend implements TollBackend {
 
     return response.text();
   }
+
+  /**
+   * Proxy the full llms.txt from the toll server.
+   * The server creates a session and embeds encoded tracking links.
+   * The User-Agent is forwarded so the server can identify the agent.
+   */
+  /**
+   * Proxy the full llms.txt from the toll server.
+   * siteOrigin — the scheme+host of the site embedding the SDK (e.g. "https://plurity.ai"
+   * or "http://localhost:3001"). The toll server uses this as the base URL for encoded
+   * short links so they resolve on the customer's middleware, not toll.plurity.ai.
+   */
+  async getLlmsTxt(siteId: string, userAgent?: string, siteOrigin?: string): Promise<{ content: string; sessionKey?: string }> {
+    const url = `${this.serverUrl}/api/public/${siteId}/llms.txt`;
+    const headers: Record<string, string> = { "X-Site-Key": this.siteKey };
+    if (userAgent) headers["User-Agent"] = userAgent;
+    if (siteOrigin) headers["X-Site-Origin"] = siteOrigin;
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to get llms.txt: ${response.status} ${response.statusText}`);
+    }
+    const content = await response.text();
+    const sessionKey = response.headers.get("x-plurity-session-key") ?? undefined;
+    return { content, sessionKey };
+  }
+
+  /**
+   * Resolve a /r/{encoded} short link via the toll server.
+   * siteOrigin — the scheme+host of the customer's site. If the target URL's domain
+   * matches the site's registered domain, the server rewrites it to siteOrigin so
+   * local dev redirects stay on localhost instead of going to the production URL.
+   */
+  async convertSession(sessionKey: string, cookieId?: string): Promise<{ visitorCookieId: string | null }> {
+    const url = `${this.serverUrl}/api/public/session-convert`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionKey, cookieId }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to convert session: ${response.status}`);
+    }
+    return response.json() as Promise<{ visitorCookieId: string | null }>;
+  }
+
+  async resolveRedirect(encoded: string, cookieId?: string, siteOrigin?: string): Promise<{ targetUrl: string; visitorCookieId: string | null }> {
+    const url = `${this.serverUrl}/api/public/redirect-info`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ encoded, cookieId, siteOrigin }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to resolve redirect: ${response.status}`);
+    }
+    return response.json() as Promise<{ targetUrl: string; visitorCookieId: string | null }>;
+  }
 }
 
 // ── LocalBackend ──────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@plurity/toll": "^0.1.1"
+    "@plurity/toll": "workspace:*"
   },
   "peerDependencies": {
     "next": ">=14.0.0"
