@@ -231,7 +231,8 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
 
     // If a human lands with ?_s= (e.g. agent shared a direct URL instead of /r/),
     // mark the session converted and set the visitor cookie — same as the /r/ flow.
-    if (hasInternalParams && sessionKey && !tracked.isAgent) {
+    // trackAny always returns isAgent:true so we check isLlmAgent to distinguish humans.
+    if (hasInternalParams && sessionKey && !tracked.isLlmAgent) {
       const existingCookieId = request.cookies.get(VISITOR_COOKIE)?.value;
       const backend = toll["backend"] as { convertSession?: (sk: string, cid?: string) => Promise<{ visitorCookieId: string | null }> };
 
