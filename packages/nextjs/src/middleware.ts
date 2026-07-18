@@ -17,6 +17,7 @@ export type TollMiddlewareConfig = Omit<TollConfig, "siteId"> & {
 const VISITOR_COOKIE = "_ptv";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const SESSION_PARAM = "_s";
+const CAMPAIGN_PARAM = "_c";
 
 interface ShortLinkPayload { s?: string; c?: string; p: string; q?: string; }
 
@@ -48,11 +49,12 @@ function extractUtm(url: URL): Pick<TrackingExtra, "utmSource" | "utmMedium" | "
   };
 }
 
-/** Remove internal tracking params (_s, utm_*) from a URL for clean serving. */
+/** Remove internal tracking params (_s, _c, utm_*) from a URL for clean serving. */
 function stripTrackingParams(url: URL): URL {
   const clean = new URL(url.href);
   clean.searchParams.delete(SESSION_PARAM);
-  // UTM params are intentionally kept in the URL — only _s is internal
+  clean.searchParams.delete(CAMPAIGN_PARAM);
+  // UTM params are intentionally kept in the URL — only _s/_c are internal
   return clean;
 }
 
@@ -61,7 +63,8 @@ function stripTrackingParams(url: URL): URL {
  * 1. Handles /r/{encoded} short links — resolves via toll server, sets visitor cookie on site domain
  * 2. Serves /llms.txt by proxying the toll server (creates session, encodes links)
  * 3. Extracts utm_* params from all requests and includes them in tracking events
- * 4. Propagates ?_s= session key from redirect targets through subsequent agent page views
+ * 4. Propagates ?_s= session key and ?_c= campaign id from plain tracked target
+ *    URLs, converting the session / bumping the campaign click counter on landing
  * 5. Redirects LLM provider crawlers with 307 when forceRedirect is configured
  * 6. Tracks known agents (bots) on all paths
  */
@@ -153,9 +156,10 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
     // Extract attribution from URL
     const utm = extractUtm(requestUrl);
     const sessionKey = requestUrl.searchParams.get(SESSION_PARAM) ?? undefined;
+    const campaignId = requestUrl.searchParams.get(CAMPAIGN_PARAM) ?? undefined;
 
-    const hasInternalParams = !!sessionKey;
-    // Use the clean URL (without _s) for tracking so the page_path recorded is canonical
+    const hasInternalParams = !!sessionKey || !!campaignId;
+    // Use the clean URL (without _s/_c) for tracking so the page_path recorded is canonical
     const cleanUrl = hasInternalParams ? stripTrackingParams(requestUrl) : requestUrl;
 
     const extra: TrackingExtra = {
@@ -211,7 +215,7 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
 
     // ── CMS answer pages ─────────────────────────────────────────────────────
     try {
-      const answer = await toll.serveAnswerPage(pathname);
+      const answer = await toll.serveAnswerPage(pathname, sessionKey);
       if (answer) {
         flushIfAgent(tracked, toll, event);
         return new NextResponse(answer.content, {
@@ -229,42 +233,54 @@ export function createTollMiddleware(config: TollMiddlewareConfig) {
     // ── All other paths ───────────────────────────────────────────────────────
     flushIfAgent(tracked, toll, event);
 
-    // If a human lands with ?_s= (e.g. agent shared a direct URL instead of /r/),
-    // mark the session converted and set the visitor cookie — same as the /r/ flow.
+    // If a human lands with ?_s= and/or ?_c= (e.g. agent shared a direct URL
+    // instead of /r/, or a campaign link's target URL), mark the session
+    // converted / bump the campaign click counter, and set the visitor cookie.
     // trackAny always returns isAgent:true so we check isLlmAgent to distinguish humans.
-    if (hasInternalParams && sessionKey && !tracked.isLlmAgent) {
+    if (hasInternalParams && !tracked.isLlmAgent) {
       const existingCookieId = request.cookies.get(VISITOR_COOKIE)?.value;
-      const backend = toll["backend"] as { convertSession?: (sk: string, cid?: string) => Promise<{ visitorCookieId: string | null }> };
+      const backend = toll["backend"] as {
+        convertSession?: (sk: string, cid?: string) => Promise<{ visitorCookieId: string | null }>;
+        convertCampaignClick?: (id: string) => Promise<void>;
+      };
 
-      if (backend.convertSession) {
-        const convertPromise = backend.convertSession(sessionKey, existingCookieId).then((result) => {
-          // Cookie must be set synchronously on the response — waitUntil is too late.
-          // We handle it below; the promise just does the DB work.
-          return result;
-        });
+      let visitorCookieId: string | null = null;
+      const conversions: Promise<unknown>[] = [];
 
+      if (sessionKey && backend.convertSession) {
+        conversions.push(
+          backend.convertSession(sessionKey, existingCookieId).then((result) => {
+            visitorCookieId = result.visitorCookieId;
+          })
+        );
+      }
+      if (campaignId && backend.convertCampaignClick) {
+        conversions.push(backend.convertCampaignClick(campaignId));
+      }
+
+      if (conversions.length > 0) {
         try {
-          const { visitorCookieId } = await convertPromise;
-          const response = NextResponse.rewrite(cleanUrl);
-          if (visitorCookieId) {
-            response.cookies.set(VISITOR_COOKIE, visitorCookieId, {
-              httpOnly: true,
-              secure: true,
-              sameSite: "lax",
-              maxAge: COOKIE_MAX_AGE,
-              path: "/",
-            });
-          }
-          return response;
+          await Promise.all(conversions);
         } catch {
-          // non-fatal — fall through
+          // non-fatal — still serve the page below
         }
+        const response = NextResponse.rewrite(cleanUrl);
+        if (visitorCookieId) {
+          response.cookies.set(VISITOR_COOKIE, visitorCookieId, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "lax",
+            maxAge: COOKIE_MAX_AGE,
+            path: "/",
+          });
+        }
+        return response;
       }
 
       return NextResponse.rewrite(cleanUrl);
     }
 
-    // Strip _s from URL for agent requests (already tracked via event)
+    // Strip _s/_c from URL for agent requests (already tracked via event)
     if (hasInternalParams) {
       return NextResponse.rewrite(cleanUrl);
     }

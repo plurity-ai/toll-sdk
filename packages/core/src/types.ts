@@ -20,6 +20,12 @@ export interface TrackingEvent {
   utmCampaign?: string;
   utmContent?: string;
   utmTerm?: string;
+  /**
+   * The real customer-facing hostname this request arrived on — from
+   * X-Forwarded-Host when present (e.g. behind plurity-toll-proxy's reverse
+   * proxy), falling back to the request URL's own host otherwise.
+   */
+  requestHost?: string;
 }
 
 export interface QAPair {
@@ -27,6 +33,8 @@ export interface QAPair {
   question: string;
   answerUrl: string;
   answerSummary?: string;
+  /** Real, human-facing landing URL — used to build the "Source" citation link. */
+  redirectUrl?: string;
   sortOrder: number;
   isPublished: boolean;
 }
@@ -71,6 +79,8 @@ export interface TrackingExtra {
   utmCampaign?: string;
   utmContent?: string;
   utmTerm?: string;
+  /** See TrackingEvent.requestHost. */
+  requestHost?: string;
 }
 
 export interface TrackResult {
@@ -148,4 +158,6 @@ export interface TollBackend {
   resolveRedirect?(encoded: string, cookieId?: string, siteOrigin?: string): Promise<{ targetUrl: string; visitorCookieId: string | null }>;
   /** Optional: mark a session as converted when a human lands with ?_s= outside of /r/ flow. */
   convertSession?(sessionKey: string, cookieId?: string): Promise<{ visitorCookieId: string | null }>;
+  /** Optional: increment a campaign's click counter when a human lands with ?_c= on its plain target URL. */
+  convertCampaignClick?(campaignId: string): Promise<void>;
 }

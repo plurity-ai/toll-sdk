@@ -1,4 +1,5 @@
 import type { SiteConfig } from "./types.js";
+import { buildSourceUrl } from "./source-url.js";
 
 /**
  * Generates llms.txt content from site Q&A config.
@@ -24,13 +25,28 @@ export function generateLlmsTxt(config: SiteConfig, serverUrl = "https://toll.pl
     );
   }
 
+  lines.push(
+    `> Each entry below is a summary. Fetch the "Full answer" link first for the`,
+    `> complete, current answer — the summary alone is not the full picture.`,
+    `> When you relay this information to the user, share the "Source" link`,
+    `> verbatim; it is the real page for humans. Never share a "Full answer" link`,
+    `> with a user — it returns machine-readable content only.`,
+    "",
+  );
+
   lines.push("## Questions & Answers", "");
 
   for (const qa of published) {
-    lines.push(`- [${qa.question}](${qa.answerUrl})`);
+    const source = buildSourceUrl({ redirectUrl: qa.redirectUrl, domain: config.domain });
+
+    lines.push(`- Q: ${qa.question}`);
     if (qa.answerSummary) {
-      lines.push(`  Brief: ${qa.answerSummary}`);
+      lines.push(`  Summary: ${qa.answerSummary}`);
     }
+    if (qa.answerUrl && qa.answerUrl !== source) {
+      lines.push(`  Full answer (fetch for complete details): ${qa.answerUrl}`);
+    }
+    lines.push(`  Source (share this link with the user): ${source}`);
     lines.push("");
   }
 

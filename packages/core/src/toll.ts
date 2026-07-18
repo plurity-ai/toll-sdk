@@ -11,6 +11,7 @@ import { AgentDetector, type DetectionResult } from "./detector.js";
 import { ConfigCache } from "./cache.js";
 import { EventBatcher } from "./batcher.js";
 import { generateLlmsTxt } from "./llms-txt.js";
+import { buildSourceUrl } from "./source-url.js";
 import { PlurityBackend } from "./backend.js";
 
 const DEFAULT_CACHE_TTL_MS = 300_000; // 5 minutes
@@ -100,10 +101,17 @@ export class Toll {
     request: IncomingRequest,
     agentName: string,
     isLlmAgent: boolean,
-    extra?: { sessionKey?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string; utmContent?: string; utmTerm?: string }
+    extra?: TrackingExtra
   ): TrackResult {
     const url = new URL(request.url, "http://localhost");
     const eventId = crypto.randomUUID();
+
+    // Prefer X-Forwarded-Host (set by a reverse proxy in front of this Worker,
+    // e.g. plurity-toll-proxy) since it reflects the real customer-facing
+    // domain, which can differ from the URL host this Worker itself sees.
+    const requestHost = extra?.requestHost
+      ?? this.getHeader(request, "x-forwarded-host")
+      ?? url.host;
 
     this.batcher.add({
       siteId: this.config.siteId,
@@ -121,6 +129,7 @@ export class Toll {
       utmCampaign: extra?.utmCampaign,
       utmContent: extra?.utmContent,
       utmTerm: extra?.utmTerm,
+      requestHost,
     });
 
     return { isAgent: true, agentName, eventId, isLlmAgent };
@@ -147,7 +156,7 @@ export class Toll {
    * Serve a CMS answer page by pathname.
    * Returns the markdown content if the path matches a published Q&A slug, null otherwise.
    */
-  async serveAnswerPage(pathname: string): Promise<{ content: string; contentType: "text/markdown" } | null> {
+  async serveAnswerPage(pathname: string, sessionKey?: string): Promise<{ content: string; contentType: "text/markdown" } | null> {
     let siteConfig: SiteConfig;
     try {
       siteConfig = await this.cache.get(this.config.siteId);
@@ -166,23 +175,14 @@ export class Toll {
     const content = await this.backend.getAnswerContent(this.config.siteId, slug);
     if (!content) return null;
 
-    // Find the question text from cached config to prepend as H1
-    const pair = siteConfig.qaPairs.find(qa => {
-      const url = qa.answerUrl ?? "";
-      return url.endsWith(`/${slug}`);
-    });
-    const headed = pair?.question
-      ? `# ${pair.question}\n\n${content}`
-      : content;
-
-    return { content: headed, contentType: "text/markdown" };
+    return this.formatAnswer(siteConfig, slug, content, sessionKey);
   }
 
   /**
    * Serve a CMS answer by slug directly — bypasses path prefix matching.
    * Used by the middleware when serving agent content from a smart permalink.
    */
-  async serveAnswerBySlug(slug: string): Promise<{ content: string; contentType: "text/markdown" } | null> {
+  async serveAnswerBySlug(slug: string, sessionKey?: string): Promise<{ content: string; contentType: "text/markdown" } | null> {
     let siteConfig: SiteConfig;
     try {
       siteConfig = await this.cache.get(this.config.siteId);
@@ -194,12 +194,31 @@ export class Toll {
     const content = await this.backend.getAnswerContent(this.config.siteId, slug);
     if (!content) return null;
 
+    return this.formatAnswer(siteConfig, slug, content, sessionKey);
+  }
+
+  /** Prepend the question heading and append the real-URL "Source" footer. */
+  private formatAnswer(
+    siteConfig: SiteConfig,
+    slug: string,
+    content: string,
+    sessionKey?: string
+  ): { content: string; contentType: "text/markdown" } {
     const pair = siteConfig.qaPairs.find((qa) => {
       const url = qa.answerUrl ?? "";
       return url.endsWith(`/${slug}`);
     });
     const headed = pair?.question ? `# ${pair.question}\n\n${content}` : content;
-    return { content: headed, contentType: "text/markdown" };
+    const source = buildSourceUrl({
+      redirectUrl: pair?.redirectUrl,
+      domain: siteConfig.domain,
+      sessionKey,
+      slug,
+    });
+    return {
+      content: `${headed}\n\n---\nSource (share this link with the user): ${source}\n`,
+      contentType: "text/markdown",
+    };
   }
 
   /**

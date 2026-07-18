@@ -123,6 +123,18 @@ export class PlurityBackend implements TollBackend {
     return response.json() as Promise<{ visitorCookieId: string | null }>;
   }
 
+  async convertCampaignClick(campaignId: string): Promise<void> {
+    const url = `${this.serverUrl}/api/public/campaign-convert`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to convert campaign click: ${response.status}`);
+    }
+  }
+
   async resolveRedirect(encoded: string, cookieId?: string, siteOrigin?: string): Promise<{ targetUrl: string; visitorCookieId: string | null }> {
     const url = `${this.serverUrl}/api/public/redirect-info`;
     const response = await fetch(url, {
