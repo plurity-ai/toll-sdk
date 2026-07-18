@@ -1,6 +1,6 @@
 {
   "name": "@plurity/toll-nextjs",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Next.js middleware adapter for @plurity/toll",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -24,7 +24,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@plurity/toll": "workspace:*"
+    "@plurity/toll": "^0.1.3"
   },
   "peerDependencies": {
     "next": ">=14.0.0"
