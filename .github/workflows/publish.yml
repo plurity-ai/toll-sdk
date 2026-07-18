@@ -48,19 +48,21 @@ jobs:
 
       - name: Bump versions
         run: |
-          cd packages/core    && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
-          cd packages/nextjs  && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
-          cd packages/express && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
-          cd packages/browser && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/core      && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/nextjs    && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/express   && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/browser   && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
+          cd packages/cloudflare && npm version ${{ inputs.version_bump }} --no-git-tag-version && cd ../..
           pnpm install --no-frozen-lockfile
 
       # npm publish handles OIDC token exchange for provenance; pnpm publish does not.
       - name: Publish packages
         run: |
-          (cd packages/core    && npm publish --provenance --access public)
-          (cd packages/nextjs  && npm publish --provenance --access public)
-          (cd packages/express && npm publish --provenance --access public)
-          (cd packages/browser && npm publish --provenance --access public)
+          (cd packages/core      && npm publish --provenance --access public)
+          (cd packages/nextjs    && npm publish --provenance --access public)
+          (cd packages/express   && npm publish --provenance --access public)
+          (cd packages/browser   && npm publish --provenance --access public)
+          (cd packages/cloudflare && npm publish --provenance --access public)
 
       - name: Commit version bumps
         run: |
