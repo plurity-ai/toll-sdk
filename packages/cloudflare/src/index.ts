@@ -23,6 +23,13 @@ export interface TollWorkerConfig {
   forceRedirect?: string;
   /** Called when a flush to the toll server fails — use for error logging. */
   onError?: (err: Error) => void;
+  /**
+   * Whether to read/set the `_ptv` visitor cookie for cross-session attribution.
+   * Defaults to `true`. The cookie is set unconditionally whenever the backend
+   * resolves a visitor id — there is no per-request consent check — so set this
+   * to `false` unless the site has an explicit consent mechanism in front of it.
+   */
+  visitorCookie?: boolean;
 }
 
 const VISITOR_COOKIE = "_ptv";
@@ -111,6 +118,7 @@ function toIncomingRequest(request: Request, url: URL): IncomingRequest {
  *       siteId: env.SITE_ID,
  *       siteKey: env.SITE_KEY,
  *       assets: env.ASSETS,
+ *       visitorCookie: false, // only enable once a real consent mechanism gates it
  *     });
  *   },
  * };
@@ -133,6 +141,7 @@ export async function handleToll(
   const siteOrigin = `${requestUrl.protocol}//${requestUrl.host}`;
   const isSecure = requestUrl.protocol === "https:";
   const llmsTxtPath = config.llmsTxtPath ?? "/llms.txt";
+  const cookiesEnabled = config.visitorCookie !== false;
 
   // ── /r/{encoded} — tracked short link redirect ─────────────────────────────
   const shortLinkMatch = pathname.match(/^\/r\/([A-Za-z0-9_-]+)$/);
@@ -164,7 +173,7 @@ export async function handleToll(
     }
 
     // Human (or agent without a CMS slug): resolve redirect and set visitor cookie
-    const existingCookieId = getCookie(request, VISITOR_COOKIE);
+    const existingCookieId = cookiesEnabled ? getCookie(request, VISITOR_COOKIE) : undefined;
     let targetUrl = "/";
     let visitorCookieId: string | null = null;
 
@@ -183,7 +192,7 @@ export async function handleToll(
 
     const destination = targetUrl.startsWith("http") ? targetUrl : `${siteOrigin}${targetUrl}`;
     const headers = new Headers({ Location: destination });
-    if (visitorCookieId) {
+    if (cookiesEnabled && visitorCookieId) {
       headers.set("Set-Cookie", cookieHeader(VISITOR_COOKIE, visitorCookieId, COOKIE_MAX_AGE, isSecure));
     }
     return new Response(null, { status: 302, headers });
@@ -258,7 +267,7 @@ export async function handleToll(
   // Human landing with ?_s= and/or ?_c= (agent shared a direct URL instead of
   // /r/, or a campaign link's target URL) — convert session / bump click count
   if ((hasSessionParam || hasCampaignParam) && !tracked.isLlmAgent) {
-    const existingCookieId = getCookie(request, VISITOR_COOKIE);
+    const existingCookieId = cookiesEnabled ? getCookie(request, VISITOR_COOKIE) : undefined;
     const backend = toll["backend"] as {
       convertSession?: (sk: string, cid?: string) => Promise<{ visitorCookieId: string | null }>;
       convertCampaignClick?: (id: string) => Promise<void>;
@@ -287,7 +296,7 @@ export async function handleToll(
       const cleanRequest = new Request(cleanUrl.href, request);
       const assetResponse = await config.assets.fetch(cleanRequest);
       const response = new Response(assetResponse.body, assetResponse);
-      if (visitorCookieId) {
+      if (cookiesEnabled && visitorCookieId) {
         response.headers.set("Set-Cookie", cookieHeader(VISITOR_COOKIE, visitorCookieId, COOKIE_MAX_AGE, isSecure));
       }
       return response;
